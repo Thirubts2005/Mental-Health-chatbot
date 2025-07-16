@@ -1,0 +1,105 @@
+class JarvisApp {
+    constructor() {
+        this.recognition = null;
+        this.speechSynth = window.speechSynthesis;
+        this.voiceEnabled = true;
+        this.initSpeechRecognition();
+        this.setupEventListeners();
+    }
+
+    initSpeechRecognition() {
+        if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            this.recognition = new SpeechRecognition();
+            this.recognition.continuous = false;
+            this.recognition.lang = 'en-US';
+
+            this.recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                this.handleUserInput(transcript);
+            };
+
+            this.recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                this.toggleLoading(false);
+            };
+        }
+    }
+
+    setupEventListeners() {
+        document.getElementById('userInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.sendMessage();
+        });
+    }
+
+    async sendMessage() {
+        const input = document.getElementById('userInput');
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        this.handleUserInput(text);
+    }
+
+    async handleUserInput(text) {
+        this.addMessage(text, 'user');
+        this.toggleLoading(true);
+        try {
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text })
+            });
+            const data = await response.json();
+            this.addMessage(data.response, 'bot');
+            if (this.voiceEnabled) this.speak(data.response);
+        } catch (error) {
+            console.error('Fetch error:', error);
+            this.addMessage("An error occurred while contacting JARVIS.", 'bot');
+        } finally {
+            this.toggleLoading(false);
+        }
+    }
+
+    addMessage(text, sender) {
+        const history = document.getElementById('chatHistory');
+        const msg = document.createElement('div');
+        msg.className = `message ${sender}`;
+        msg.textContent = text;
+        history.appendChild(msg);
+        history.scrollTop = history.scrollHeight;
+    }
+
+    speak(text) {
+        if (this.speechSynth.speaking) return;
+        const utterance = new SpeechSynthesisUtterance(text);
+        this.speechSynth.speak(utterance);
+    }
+
+    toggleLoading(state) {
+        const loading = document.getElementById('loading');
+        loading.classList.toggle('hidden', !state);
+    }
+
+    startListening() {
+        if (this.recognition) this.recognition.start();
+    }
+
+    toggleVoice() {
+        this.voiceEnabled = !this.voiceEnabled;
+        alert(`Voice output ${this.voiceEnabled ? "enabled" : "disabled"}`);
+    }
+}
+
+const app = new JarvisApp();
+
+function sendMessage() {
+    app.sendMessage();
+}
+
+function startListening() {
+    app.startListening();
+}
+
+function toggleVoice() {
+    app.toggleVoice();
+}
